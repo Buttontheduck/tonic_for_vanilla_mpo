@@ -1,7 +1,7 @@
 import torch
 
 from tonic.torch import models, updaters  # noqa
-
+from tonic import logger
 
 FLOAT_EPSILON = 1e-8
 
@@ -273,7 +273,7 @@ class MaximumAPosterioriPolicyOptimization:
         epsilon_mean=1e-3, epsilon_std=1e-6, initial_log_temperature=1.,
         initial_log_alpha_mean=1., initial_log_alpha_std=10.,
         min_log_dual=-18., per_dim_constraining=True, action_penalization=True,
-        actor_optimizer=None, dual_optimizer=None, gradient_clip=0
+        actor_optimizer=None, dual_optimizer=None, gradient_clip=0, tanh_bound=False
     ):
         self.num_samples = num_samples
         self.epsilon = epsilon
@@ -291,6 +291,7 @@ class MaximumAPosterioriPolicyOptimization:
         self.dual_optimizer = actor_optimizer or (
             lambda params: torch.optim.Adam(params, lr=1e-2))
         self.gradient_clip = gradient_clip
+        self.tanh_bound = tanh_bound
 
     def initialize(self, model, action_space):
         self.model = model
@@ -316,11 +317,34 @@ class MaximumAPosterioriPolicyOptimization:
         self.dual_optimizer = self.dual_optimizer(self.dual_variables)
 
     def __call__(self, observations):
+        
         def parametric_kl_and_dual_losses(kl, alpha, epsilon):
             kl_mean = kl.mean(dim=0)
             kl_loss = (alpha.detach() * kl_mean).sum()
             alpha_loss = (alpha * (epsilon - kl_mean.detach())).sum()
             return kl_loss, alpha_loss
+        
+        def effective_sample_size(weights: torch.Tensor, dim: int = 0) -> torch.Tensor:
+            """
+            Effective sample size along the given dim.
+            Assumes `weights.sum(dim) == 1` (already normalized).
+            Returns a tensor with `weights.shape` minus the chosen dim.
+            """
+            return 1.0 / (weights.pow(2).sum(dim=dim))
+        
+        
+        def compute_nonparametric_kl_from_normalized_weights(
+            normalized_weights: torch.Tensor) -> torch.Tensor:
+            """ E-Step KL """
+            """Estimate the actualized KL between the non-parametric and target policies."""
+            # Compute integrand.
+            num_action_samples = normalized_weights.shape[0] / 1.
+            integrand = torch.log(num_action_samples * normalized_weights + 1e-8)
+            # Return the expectation with respect to the non-parametric policy.
+            kl_sample = torch.sum(normalized_weights * integrand, dim=0)
+            kl_mean = kl_sample.mean()
+            return kl_mean
+
 
         def weights_and_temperature_loss(q_values, epsilon, temperature):
             tempered_q_values = q_values.detach() / temperature
@@ -357,6 +381,9 @@ class MaximumAPosterioriPolicyOptimization:
 
             target_distributions = self.model.target_actor(observations)
             actions = target_distributions.sample((self.num_samples,))
+        
+            if self.tanh_bound:
+                actions = torch.tanh(actions)
 
             tiled_observations = updaters.tile(observations, self.num_samples)
             flat_observations = updaters.merge_first_two_dims(
@@ -383,6 +410,14 @@ class MaximumAPosterioriPolicyOptimization:
             self.log_alpha_std) + FLOAT_EPSILON
         weights, temperature_loss = weights_and_temperature_loss(
             values, self.epsilon, temperature)
+        
+        kl_e_step = compute_nonparametric_kl_from_normalized_weights(weights)
+        ess = effective_sample_size(weights)
+        
+        logger.store('E_inference/Weights', weights, log_weights=True)       
+        logger.store('E_inference/kl_e_step', kl_e_step, stats=True)
+        logger.store('E_inference/Effective_Sample_Size', ess, stats=True)
+
 
         # Action penalization is quadratic beyond [-1, 1].
         if self.action_penalization:

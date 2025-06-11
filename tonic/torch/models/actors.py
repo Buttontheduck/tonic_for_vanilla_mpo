@@ -81,13 +81,13 @@ class GaussianPolicyHead(torch.nn.Module):
         self.scale_fn = scale_fn
         self.distribution = distribution
 
-    def initialize(self, input_size, action_size):
+    def initialize(self, input_size, action_size, device):
         self.loc_layer = torch.nn.Sequential(
-            torch.nn.Linear(input_size, action_size), self.loc_activation())
+            torch.nn.Linear(input_size, action_size), self.loc_activation()).to(device)
         if self.loc_fn:
             self.loc_layer.apply(self.loc_fn)
         self.scale_layer = torch.nn.Sequential(
-            torch.nn.Linear(input_size, action_size), self.scale_activation())
+            torch.nn.Linear(input_size, action_size), self.scale_activation()).to(device)
         if self.scale_fn:
             self.scale_layer.apply(self.scale_fn)
 
@@ -116,20 +116,21 @@ class DeterministicPolicyHead(torch.nn.Module):
 
 
 class Actor(torch.nn.Module):
-    def __init__(self, encoder, torso, head):
+    def __init__(self, encoder, torso, head, device):
         super().__init__()
         self.encoder = encoder
         self.torso = torso
         self.head = head
+        self.device = device
 
     def initialize(
         self, observation_space, action_space, observation_normalizer=None
     ):
         size = self.encoder.initialize(
             observation_space, observation_normalizer)
-        size = self.torso.initialize(size)
+        size = self.torso.initialize(size, self.device)
         action_size = action_space.shape[0]
-        self.head.initialize(size, action_size)
+        self.head.initialize(size, action_size, device= self.device)
 
     def forward(self, *inputs):
         out = self.encoder(*inputs)

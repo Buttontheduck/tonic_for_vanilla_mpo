@@ -2,7 +2,7 @@ import torch
 
 from tonic import logger, replays  # noqa
 from tonic.torch import agents, models, normalizers, updaters
-
+from configs.utils.builder import build_model, build_actor_updater, build_critic_updater, build_replay_updater
 
 def default_model():
     return models.ActorCriticWithTargets(
@@ -24,14 +24,14 @@ class MPO(agents.Agent):
     '''
 
     def __init__(
-        self, model=None, replay=None, actor_updater=None, critic_updater=None
+        self, model, replay_updater, actor_updater, critic_updater
     ):
-        self.model = model or default_model()
-        self.replay = replay or replays.Buffer(return_steps=5)
-        self.actor_updater = actor_updater or \
+        self.model = build_model(model) or default_model() 
+        self.replay =  build_replay_updater(replay_updater)
+        self.actor_updater = build_actor_updater(actor_updater) or \
             updaters.MaximumAPosterioriPolicyOptimization()
-        self.critic_updater = critic_updater or updaters.ExpectedSARSA()
-
+        self.critic_updater = build_critic_updater(critic_updater) or updaters.ExpectedSARSA()
+        
     def initialize(self, observation_space, action_space, seed=None):
         super().initialize(seed=seed)
         self.model.initialize(observation_space, action_space)
