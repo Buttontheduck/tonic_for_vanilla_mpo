@@ -412,8 +412,8 @@ class MaximumAPosterioriPolicyOptimization:
             values, self.epsilon, temperature)
         
         kl_e_step = compute_nonparametric_kl_from_normalized_weights(weights)
-        ess = effective_sample_size(weights)
-        ees=ess*ess
+        ess = effective_sample_size(weights)   
+        ess = ess*ess  
         logger.store('E_inference/Weights', weights, log_weights=True)       
         logger.store('E_inference/kl_e_step', kl_e_step, stats=True)
         logger.store('E_inference/Effective_Sample_Size', ess, stats=True)
