@@ -273,7 +273,7 @@ class MaximumAPosterioriPolicyOptimization:
         epsilon_mean=1e-3, epsilon_std=1e-6, initial_log_temperature=1.,
         initial_log_alpha_mean=1., initial_log_alpha_std=10.,
         min_log_dual=-18., per_dim_constraining=True, action_penalization=True,
-        actor_optimizer=None, dual_optimizer=None, gradient_clip=0, tanh_bound=False
+        actor_optimizer=None, dual_optimizer=None, gradient_clip=0, tanh_bound=False, temperature_state = True
     ):
         self.num_samples = num_samples
         self.epsilon = epsilon
@@ -290,19 +290,27 @@ class MaximumAPosterioriPolicyOptimization:
             lambda params: torch.optim.Adam(params, lr=3e-4))
         self.dual_optimizer = actor_optimizer or (
             lambda params: torch.optim.Adam(params, lr=1e-2))
+        self.temperature_optimizer = actor_optimizer or (
+            lambda params: torch.optim.Adam(params, lr=1e-2))
         self.gradient_clip = gradient_clip
         self.tanh_bound = tanh_bound
-
+        self.temperature_state = temperature_state
+        
     def initialize(self, model, action_space):
         self.model = model
         self.actor_variables = models.trainable_variables(self.model.actor)
         self.actor_optimizer = self.actor_optimizer(self.actor_variables)
+        
+        self.temperature_variables = models.trainable_variables(self.model.temperature)
+        self.temperature_optimizer = self.temperature_optimizer(self.temperature_variables)
+        
 
         # Dual variables.
         self.dual_variables = []
-        self.log_temperature = torch.nn.Parameter(torch.as_tensor(
+        if not self.temperature_state:
+            self.log_temperature = torch.nn.Parameter(torch.as_tensor(
             [self.initial_log_temperature], dtype=torch.float32))
-        self.dual_variables.append(self.log_temperature)
+            self.dual_variables.append(self.log_temperature)
         shape = [action_space.shape[0]] if self.per_dim_constraining else [1]
         self.log_alpha_mean = torch.nn.Parameter(torch.full(
             shape, self.initial_log_alpha_mean, dtype=torch.float32))
@@ -369,8 +377,11 @@ class MaximumAPosterioriPolicyOptimization:
                     distribution_1.mean, distribution_2.stddev), -1)
 
         with torch.no_grad():
-            self.log_temperature.data.copy_(
+            
+            if not self.temperature_state:
+                self.log_temperature.data.copy_(
                 torch.maximum(self.min_log_dual, self.log_temperature))
+                
             self.log_alpha_mean.data.copy_(
                 torch.maximum(self.min_log_dual, self.log_alpha_mean))
             self.log_alpha_std.data.copy_(
@@ -401,23 +412,27 @@ class MaximumAPosterioriPolicyOptimization:
 
         distributions = self.model.actor(observations)
         distributions = independent_normals(distributions)
-
-        temperature = torch.nn.functional.softplus(
+        
+        if not self.temperature_state:
+            temperature = torch.nn.functional.softplus(
             self.log_temperature) + FLOAT_EPSILON
+        else: 
+            temperature = self.model.temperature(observations.to(self.device))
+        
         alpha_mean = torch.nn.functional.softplus(
             self.log_alpha_mean) + FLOAT_EPSILON
         alpha_std = torch.nn.functional.softplus(
             self.log_alpha_std) + FLOAT_EPSILON
         weights, temperature_loss = weights_and_temperature_loss(
-            values, self.epsilon, temperature)
+            values, self.epsilon, temperature.cpu())
         
         kl_e_step = compute_nonparametric_kl_from_normalized_weights(weights)
         ess = effective_sample_size(weights)   
-        ess = ess*ess  
+       
         logger.store('E_inference/Weights', weights, log_weights=True)       
         logger.store('E_inference/kl_e_step', kl_e_step, stats=True)
+        logger.store('E_inference/η', temperature.detach().cpu(), stats=True)
         logger.store('E_inference/Effective_Sample_Size', ess, stats=True)
-
 
         # Action penalization is quadratic beyond [-1, 1].
         if self.action_penalization:

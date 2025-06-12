@@ -29,3 +29,17 @@ class ObservationActionEncoder(torch.nn.Module):
         if self.observation_normalizer:
             observations = self.observation_normalizer(observations)
         return torch.cat([observations, actions], dim=-1)
+    
+
+class IdentityEncoder(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def initialize(self, obs_space):
+        return obs_space.shape[0]
+
+    def forward(self, x, extra=None):
+        if extra is None:
+            return x
+        return x, extra
+

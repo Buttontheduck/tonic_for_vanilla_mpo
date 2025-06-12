@@ -14,10 +14,11 @@ from .encoders import ObservationActionEncoder, ObservationEncoder
 
 from .utils import MLP, trainable_variables
 
+from .temperature import Temperature
 
 __all__ = [
     MLP, trainable_variables, ObservationActionEncoder,
     ObservationEncoder, SquashedMultivariateNormalDiag,
     DetachedScaleGaussianPolicyHead, GaussianPolicyHead,
     DeterministicPolicyHead, Actor, Critic, DistributionalValueHead,
-    ValueHead, ActorCritic, ActorCriticWithTargets, ActorTwinCriticWithTargets]
+    ValueHead, ActorCritic, ActorCriticWithTargets, ActorTwinCriticWithTargets,Temperature]

@@ -28,14 +28,16 @@ class ActorCritic(torch.nn.Module):
 
 class ActorCriticWithTargets(torch.nn.Module):
     def __init__(
-        self, actor, critic, observation_normalizer=None,
+        self, actor, critic,temperature, observation_normalizer=None,
         return_normalizer=None, target_coeff=0.005
     ):
         super().__init__()
         self.actor = actor
         self.critic = critic
+        self.temperature = temperature
         self.target_actor = copy.deepcopy(actor)
         self.target_critic = copy.deepcopy(critic)
+        self.target_temperature = copy.deepcopy(temperature)
         self.observation_normalizer = observation_normalizer
         self.return_normalizer = return_normalizer
         self.target_coeff = target_coeff
@@ -48,15 +50,22 @@ class ActorCriticWithTargets(torch.nn.Module):
         self.critic.initialize(
             observation_space, action_space, self.observation_normalizer,
             self.return_normalizer)
+        self.temperature.initialize(observation_space)
+        
         self.target_actor.initialize(
             observation_space, action_space, self.observation_normalizer)
         self.target_critic.initialize(
             observation_space, action_space, self.observation_normalizer,
             self.return_normalizer)
+        self.target_temperature.initialize(observation_space)
+        
         self.online_variables = models.trainable_variables(self.actor)
         self.online_variables += models.trainable_variables(self.critic)
+        self.online_variables += models.trainable_variables(self.temperature)
         self.target_variables = models.trainable_variables(self.target_actor)
         self.target_variables += models.trainable_variables(self.target_critic)
+        self.target_variables += models.trainable_variables(self.target_temperature)
+        
         for target in self.target_variables:
             target.requires_grad = False
         self.assign_targets()
