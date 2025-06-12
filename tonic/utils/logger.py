@@ -71,7 +71,6 @@ class Logger:
         # Compute statistics if needed.
         keys = list(self.epoch_dict.keys())
         for key in keys:
-            print(key)
             values = self.epoch_dict[key]
             
             if key in self.stat_keys:

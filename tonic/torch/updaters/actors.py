@@ -304,6 +304,7 @@ class MaximumAPosterioriPolicyOptimization:
         self.temperature_variables = models.trainable_variables(self.model.temperature)
         self.temperature_optimizer = self.temperature_optimizer(self.temperature_variables)
         
+        self.device = self.model.critic.device
 
         # Dual variables.
         self.dual_variables = []
@@ -355,18 +356,34 @@ class MaximumAPosterioriPolicyOptimization:
 
 
         def weights_and_temperature_loss(q_values, epsilon, temperature):
-            tempered_q_values = q_values.detach() / temperature
-            weights = torch.nn.functional.softmax(tempered_q_values, dim=0)
-            weights = weights.detach()
+            
+            if self.temperature_state:
+                tempered_q_values = q_values.detach() / temperature.T
+                weights = torch.nn.functional.softmax(tempered_q_values, dim=0)
+                weights = weights.detach()
+    
+                # Temperature loss (dual of the E-step).
+                q_log_sum_exp = torch.logsumexp(tempered_q_values, dim=0)
+                num_actions = torch.as_tensor(
+                    q_values.shape[0], dtype=torch.float32)
+                log_num_actions = torch.log(num_actions)
+    
+                loss_per_state = epsilon + q_log_sum_exp - log_num_actions   # [B]
+                loss = (temperature.squeeze(-1) * loss_per_state).mean() 
 
-            # Temperature loss (dual of the E-step).
-            q_log_sum_exp = torch.logsumexp(tempered_q_values, dim=0)
-            num_actions = torch.as_tensor(
-                q_values.shape[0], dtype=torch.float32)
-            log_num_actions = torch.log(num_actions)
-            loss = epsilon + (q_log_sum_exp).mean() - log_num_actions
-            loss = temperature * loss
+            else:
+                tempered_q_values = q_values.detach() / temperature
+                weights = torch.nn.functional.softmax(tempered_q_values, dim=0)
+                weights = weights.detach()
 
+                # Temperature loss (dual of the E-step).
+                q_log_sum_exp = torch.logsumexp(tempered_q_values, dim=0)
+                num_actions = torch.as_tensor(
+                    q_values.shape[0], dtype=torch.float32)
+                log_num_actions = torch.log(num_actions)
+                loss = epsilon + (q_log_sum_exp).mean() - log_num_actions
+                loss = temperature * loss
+                
             return weights, loss
 
         # Use independent normals to satisfy KL constraints per-dimension.
@@ -408,6 +425,7 @@ class MaximumAPosterioriPolicyOptimization:
             target_distributions = independent_normals(target_distributions)
 
         self.actor_optimizer.zero_grad()
+        self.temperature_optimizer.zero_grad()
         self.dual_optimizer.zero_grad()
 
         distributions = self.model.actor(observations)
@@ -494,10 +512,11 @@ class MaximumAPosterioriPolicyOptimization:
             torch.nn.utils.clip_grad_norm_(
                 self.dual_variables, self.gradient_clip)
         self.actor_optimizer.step()
+        self.temperature_optimizer.step()
         self.dual_optimizer.step()
 
         dual_variables = dict(
-            temperature=temperature.detach(), alpha_mean=alpha_mean.detach(),
+            alpha_mean=alpha_mean.detach(),
             alpha_std=alpha_std.detach())
         if self.action_penalization:
             dual_variables['penalty_temperature'] = \
