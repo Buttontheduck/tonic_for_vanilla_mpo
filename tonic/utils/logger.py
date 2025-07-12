@@ -6,6 +6,7 @@ import numpy as np
 import termcolor
 import yaml
 import wandb
+import matplotlib.pyplot as plt
 
 current_logger = None
 
@@ -44,12 +45,13 @@ class Logger:
         self.known_keys = set()
         self.stat_keys = set()
         self.w_keys = set()
+        self.kl_keys = set()
         self.epoch_dict = {}
         self.width = width
         self.last_epoch_progress = None
         self.start_time = time.time()
 
-    def store(self, key, value, stats=False, log_weights=False):
+    def store(self, key, value, stats=False, log_weights=False, log_kl = False):
         '''Keeps named values during an epoch.'''
 
         if key not in self.epoch_dict:
@@ -58,6 +60,10 @@ class Logger:
             if log_weights:
                 self.w_keys.add(key)       
                 stats = False    
+            
+            if log_kl:
+                self.kl_keys.add(key)
+                stats = False
                 
             if stats:
                 self.stat_keys.add(key)
@@ -113,8 +119,33 @@ class Logger:
                 
                 self.epoch_dict[key+'/mean'] = mean.numpy()
                 
+            if key in self.kl_keys:
+                
+                val = torch.stack(values)
+                
+                val_100 = val[100]
+                val_500 = val[500]
+                val_999 = val[999]    
+                
+                
+                x = range(len(val_999))  # 0–255
+
+
+                fig, ax = plt.subplots(figsize=(6,4))
+                ax.plot(x, val_999, marker='.', linestyle='-')
+                ax.set_xlabel("Index")
+                ax.set_ylabel("Value")
+                ax.set_title("val_999 over indices")
+
+                # log it to W&B
+                wandb.log({key + '/LinePlot/val_999_line': wandb.Image(fig)})
                 
 
+                
+                wandb.log({key+'/Histogram/ T=100': wandb.Histogram(val_100.numpy())})
+                wandb.log({key+'/Histogram/ T=500': wandb.Histogram(val_500.numpy())})
+                wandb.log({key+'/Histogram/ T=999': wandb.Histogram(val_999.numpy())})                
+                         
             else:
                 self.epoch_dict[key] = np.mean(values)
 

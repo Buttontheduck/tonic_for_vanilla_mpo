@@ -136,9 +136,8 @@ def train(wandb_config,trainer_config,agent_config,
         path = os.path.join(environment_name, name, str(seed))
         tonic.logger.initialize(path, script_path=__file__, config=args)
 
-        # TODO: make init_config to added wandb as wandb.init(**wandb_params, config=init_config)
-        #init_config = OmegaConf.to_container(agent_params, resolve=True)
-        wandb.init(**wandb_params)
+
+        ##wandb.init(**wandb_params)
         
         # Build the trainer.
         trainer = trainer or 'tonic.Trainer()'
