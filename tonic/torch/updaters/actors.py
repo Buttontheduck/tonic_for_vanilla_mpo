@@ -381,15 +381,18 @@ class MaximumAPosterioriPolicyOptimization:
 
             target_distributions = self.model.target_actor(observations)
             actions = target_distributions.sample((self.num_samples,))
-        
-            if self.tanh_bound:
-                actions = torch.tanh(actions)
+            actions = actions.to("cpu")
+     
+
 
             tiled_observations = updaters.tile(observations, self.num_samples)
             flat_observations = updaters.merge_first_two_dims(
                 tiled_observations)
             flat_actions = updaters.merge_first_two_dims(actions)
-            values = self.model.target_critic(flat_observations, flat_actions)
+            
+            values = self.model.target_critic(flat_observations, flat_actions)  # C-51 object
+            values = values.to("cpu")
+            #values = value_dist.mean()
             values = values.view(self.num_samples, -1)
 
             assert isinstance(
@@ -403,17 +406,19 @@ class MaximumAPosterioriPolicyOptimization:
         distributions = independent_normals(distributions)
 
         temperature = torch.nn.functional.softplus(
-            self.log_temperature) + FLOAT_EPSILON
+            self.log_temperature).to("cpu") + FLOAT_EPSILON
         alpha_mean = torch.nn.functional.softplus(
-            self.log_alpha_mean) + FLOAT_EPSILON
+            self.log_alpha_mean).to("cpu") + FLOAT_EPSILON
         alpha_std = torch.nn.functional.softplus(
-            self.log_alpha_std) + FLOAT_EPSILON
+            self.log_alpha_std).to("cpu") + FLOAT_EPSILON
         weights, temperature_loss = weights_and_temperature_loss(
             values, self.epsilon, temperature)
         
         kl_e_step = compute_nonparametric_kl_from_normalized_weights(weights)
         ess = effective_sample_size(weights)
         
+        logger.store('Q/Difference',torch.mean(values.detach().cpu().max(dim=0).values -values.detach().cpu().min(dim=0).values) , stats=True)
+        logger.store('Q/values', values.detach().cpu() , log_weights=True)         
         logger.store('E_inference/Weights', weights, log_weights=True)       
         logger.store('E_inference/kl_e_step', kl_e_step, stats=True)
         logger.store('E_inference/Effective_Sample_Size', ess, stats=True)

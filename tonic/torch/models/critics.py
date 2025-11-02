@@ -54,12 +54,12 @@ class DistributionalValueHead(torch.nn.Module):
         self.fn = fn
         self.values = torch.linspace(vmin, vmax, num_atoms).float()
 
-    def initialize(self, input_size, return_normalizer=None):
+    def initialize(self, input_size, return_normalizer=None,device= 'cpu'):
         if return_normalizer:
             raise ValueError(
                 'Return normalizers cannot be used with distributional value'
                 'heads.')
-        self.distributional_layer = torch.nn.Linear(input_size, self.num_atoms)
+        self.distributional_layer = torch.nn.Linear(input_size, self.num_atoms).to(device)
         if self.fn:
             self.distributional_layer.apply(self.fn)
 
@@ -83,8 +83,8 @@ class Critic(torch.nn.Module):
         size = self.encoder.initialize(
             observation_space=observation_space, action_space=action_space,
             observation_normalizer=observation_normalizer)
-        size = self.torso.initialize(size,device=self.device)
-        self.head.initialize(size, return_normalizer,device= self.device)
+        size = self.torso.initialize(size, device = self.device)
+        self.head.initialize(size, return_normalizer , device = self.device)
 
     def forward(self, *inputs):
         out = self.encoder(*inputs)

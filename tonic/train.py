@@ -27,7 +27,7 @@ def train(wandb_config,trainer_config,agent_config,
     for key in ('wandb_config', 'trainer_config', 'agent_config'):
         args.pop(key, None)
     
-    wandb_params = wandb_config['wandb_config']
+    #wandb_params = wandb_config['wandb_config']
     trainer_params = trainer_config['trainer_config']
     agent_params = agent_config['agent_config']
 
@@ -114,7 +114,7 @@ def train(wandb_config,trainer_config,agent_config,
         
         agent.initialize(
             observation_space=environment.observation_space,
-            action_space=environment.action_space, seed=seed)
+            action_space=environment.action_space,  seed=seed)
 
         # Load the weights of the agent form a checkpoint.
         if checkpoint_path:
@@ -138,7 +138,7 @@ def train(wandb_config,trainer_config,agent_config,
 
         # TODO: make init_config to added wandb as wandb.init(**wandb_params, config=init_config)
         #init_config = OmegaConf.to_container(agent_params, resolve=True)
-        wandb.init(**wandb_params)
+        #wandb.init(**wandb_params)
         
         # Build the trainer.
         trainer = trainer or 'tonic.Trainer()'
