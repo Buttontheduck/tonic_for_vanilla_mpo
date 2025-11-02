@@ -28,4 +28,7 @@ class ObservationActionEncoder(torch.nn.Module):
     def forward(self, observations, actions):
         if self.observation_normalizer:
             observations = self.observation_normalizer(observations)
-        return torch.cat([observations, actions], dim=-1)
+        if isinstance(actions, torch.Tensor):
+            return torch.cat([observations, actions], dim=-1)
+        else:
+            return torch.cat([observations, actions.sample()], dim=-1)

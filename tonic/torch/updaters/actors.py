@@ -381,7 +381,7 @@ class MaximumAPosterioriPolicyOptimization:
 
             target_distributions = self.model.target_actor(observations)
             actions = target_distributions.sample((self.num_samples,))
-            actions = actions.to("cpu")
+
      
 
 
@@ -390,9 +390,8 @@ class MaximumAPosterioriPolicyOptimization:
                 tiled_observations)
             flat_actions = updaters.merge_first_two_dims(actions)
             
-            values = self.model.target_critic(flat_observations, flat_actions)  # C-51 object
-            values = values.to("cpu")
-            #values = value_dist.mean()
+            value_dist = self.model.target_critic(flat_observations, flat_actions)  # C-51 object
+            values = value_dist.mean()
             values = values.view(self.num_samples, -1)
 
             assert isinstance(

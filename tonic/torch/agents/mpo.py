@@ -2,7 +2,7 @@ import torch
 
 from tonic import logger, replays  # noqa
 from tonic.torch import agents, models, normalizers, updaters
-from configs.utils.builder import build_model, build_actor_updater, build_critic_updater, build_replay_updater
+from configs.utils.builder_cat import build_model, build_actor_updater, build_critic_updater, build_replay_updater
 
 def default_model():
     return models.ActorCriticWithTargets(
